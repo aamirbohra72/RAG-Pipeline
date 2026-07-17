@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.routers import auth, documents, health, query, upload
 from app.services.auth_service import init_db
+from app.services.observability import configure_observability
+from app.services.vectorstore import init_vector_backend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,15 +20,17 @@ logger = logging.getLogger("rag")
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_observability()
     init_db()
+    init_vector_backend()
 
     application = FastAPI(
         title="RAG Backend (Senior)",
         description=(
-            "Service-oriented RAG with JWT auth and per-user document isolation. "
-            "Ingest → chunk → embed → hybrid retrieve → generate (sync + stream)."
+            "RAG with JWT auth, LangGraph orchestration, LangSmith tracing, "
+            "Neon pgvector, hybrid retrieve + re-rank, OCR, streaming."
         ),
-        version="2.2.0",
+        version="2.5.0",
     )
 
     application.add_middleware(

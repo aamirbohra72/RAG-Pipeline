@@ -45,11 +45,17 @@ class UploadResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    chroma_chunks: int
+    chroma_chunks: int  # indexed chunk count (legacy field name)
+    vector_backend: str = "pgvector"
     embedding_model: str
     chat_model: str
     rerank_enabled: bool = True
     ocr_enabled: bool = True
+    langchain_enabled: bool = True
+    langchain: Optional[dict] = None
+    neon_ok: Optional[bool] = None
+    langsmith_tracing: Optional[bool] = None
+    langgraph_enabled: bool = True
 
 
 class RegisterRequest(BaseModel):

@@ -1,139 +1,152 @@
-# Chat with your PDFs — Senior RAG
+# Chat with your PDFs — Architecture + LangGraph / LangSmith
 
-Service-oriented Retrieval-Augmented Generation with:
-- JWT auth + per-user document isolation
-- Hybrid retrieval + **cross-encoder re-ranker**
-- **OCR** for scanned / image-only PDFs
-- Streaming answers (SSE)
+## Current architecture (what you have now)
 
-## Architecture
+```mermaid
+flowchart TB
+  subgraph Client
+    UI[Next.js Frontend]
+  end
 
-```
-backend/
-├── main.py
-├── scripts/make_scanned_pdf.py   # builds a scan-like PDF for OCR tests
-├── app/
-│   ├── routers/   # HTTP
-│   └── services/
-│       ├── pdf_service.py      # pypdf + RapidOCR fallback
-│       ├── retrieval.py        # hybrid fusion
-│       ├── rerank_service.py   # cross-encoder / ms-marco MiniLM
-│       ├── rag_service.py
-│       └── ...
-```
+  subgraph API["FastAPI Backend"]
+    Auth[JWT Auth]
+    Upload[Upload + OCR]
+    Query[Query / Stream]
+  end
 
-### Retrieval pipeline (now)
+  subgraph Orchestration["LangGraph"]
+    R[retrieve node]
+    G[generate node]
+    E[empty node]
+    R -->|docs found| G
+    R -->|no docs| E
+  end
 
-```
-question
-  → embed (mistral-embed)
-  → Chroma top-N (user-scoped)
-  → hybrid score (vector + lexical)
-  → cross-encoder re-rank → top_k
-  → prompt mistral-large → answer + citations
-```
+  subgraph RetrieveStack["Inside retrieve"]
+    Emb[MistralAIEmbeddings]
+    VS[(Neon pgvector / Chroma)]
+    Hyb[Hybrid fusion]
+    RR[Cross-encoder re-rank]
+    Emb --> VS --> Hyb --> RR
+  end
 
-### Ingest pipeline (now)
+  subgraph GenerateStack["Inside generate"]
+    Prompt[ChatPromptTemplate]
+    LLM[ChatMistralAI]
+    Prompt --> LLM
+  end
 
-```
-PDF
-  → pypdf text layer
-  → if page < OCR_MIN_CHARS chars → render page → RapidOCR
-  → chunk → batch embed → Chroma (+ user_id)
-```
+  subgraph Observe["LangSmith"]
+    Trace[Traces / latency / tokens]
+  end
 
-## Setup
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate          # Windows
-pip install -r requirements.txt
-cp .env.example .env           # set MISTRAL_API_KEY (+ JWT_SECRET)
-uvicorn main:app --reload --port 8001
-```
-
-```bash
-cd frontend
-npm install
-# .env.local → NEXT_PUBLIC_API_URL=http://localhost:8001
-npm run dev
+  UI -->|Bearer token| Auth
+  UI --> Upload
+  UI --> Query
+  Upload -->|chunks + embeddings| VS
+  Query --> R
+  R --> RetrieveStack
+  G --> GenerateStack
+  R -.->|traced| Trace
+  G -.->|traced| Trace
+  LLM -.->|traced| Trace
 ```
 
-First query after install downloads the cross-encoder + OCR ONNX models (one-time, may take a few minutes).
+### Request lifecycle (simple)
 
-## How to verify
+1. **Register / login** → JWT  
+2. **Upload PDF** → text or OCR → chunk → embed → **Neon `document_chunks`** (scoped by `user_id`)  
+3. **Ask question** → LangGraph `retrieve` (vector + hybrid + re-rank) → `generate` (Mistral) → stream answer + citations  
+4. **LangSmith** (optional key) records each run for debugging  
 
-### 0. Health flags
+---
 
-```bash
-curl http://localhost:8001/health
+## LangGraph + LangSmith — yes, possible (now wired)
+
+| Tool | Role in this project |
+|------|----------------------|
+| **LangGraph** | Explicit graph: `retrieve → generate` (or `empty`) instead of a flat LCEL-only path |
+| **LangSmith** | Cloud monitor: traces, latency, token usage, failed steps |
+
+They do **not** replace Neon or auth. They sit on top of your existing RAG.
+
+### Target architecture (with monitoring)
+
+```mermaid
+flowchart LR
+  subgraph App
+    FE[Frontend]
+    BE[FastAPI]
+    LG[LangGraph RAG]
+  end
+
+  subgraph Data
+    Neon[(Neon + pgvector)]
+    Users[(SQLite users.db)]
+  end
+
+  subgraph CloudAI
+    Mistral[Mistral embed + chat]
+    LS[LangSmith UI]
+  end
+
+  FE --> BE
+  BE --> Users
+  BE --> LG
+  LG -->|retrieve| Neon
+  LG -->|embed/chat| Mistral
+  LG -->|traces| LS
 ```
 
-Expect `"rerank_enabled": true` and `"ocr_enabled": true`.
+---
 
-### 1. Cross-encoder re-ranker
+## Setup LangSmith
 
-1. Log in on http://localhost:3000 and upload a normal text PDF (e.g. company handbook).
-2. Ask a specific question: `What is the unique passphrase / vacation policy?`
-3. In the Sources panel you should see **`rerank …`** scores (cross-encoder), not only hybrid scores.
-4. Optional API check (after login token):
+1. Create account: https://smith.langchain.com  
+2. Create an API key  
+3. In `backend/.env`:
 
-```bash
-curl -s -X POST http://localhost:8001/query ^
-  -H "Authorization: Bearer YOUR_TOKEN" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"question\":\"How many vacation days?\"}"
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=genai-rag
 ```
 
-Look at `sources[].rerank_score`. Toggle off to compare:
+4. Restart uvicorn  
 
-```
-# in backend/.env
-RERANK_ENABLED=false
-```
+5. Ask a question in the UI → open LangSmith → project **genai-rag** → see runs for retriever + ChatMistralAI / LangGraph  
 
-Restart uvicorn — sources then use hybrid `score` only (frontend falls back).
+Without a key, the app still works; `/health` shows `"langsmith_tracing": false`.
 
-### 2. OCR for scanned PDFs
+---
 
-Create an image-only PDF (no text layer):
+## Validate
 
 ```bash
 cd backend
 venv\Scripts\activate
-python scripts/make_scanned_pdf.py
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8001
 ```
 
-Upload `sample_scanned_handbook.pdf` via the UI.
+| Check | Expect |
+|--------|--------|
+| `GET /health` | `langgraph_enabled: true`, `langchain.orchestration: langgraph` |
+| Logs on startup | `LangGraph RAG compiled` |
+| With API key | `LangSmith tracing ON` + runs in smith.langchain.com |
+| Ask a question | Answer + sources unchanged; LangSmith shows retrieve then generate |
+| No docs | Graph takes `empty` path → “No documents have been uploaded yet.” |
 
-- Upload API response / logs should show `"ocr_pages": 1` (and `"text_pages": 0`).
-- Ask: `What is the unique passphrase in the memo?`
-- Expect answer mentioning **BLUE-ORBIT-77**.
+---
 
-If OCR is off:
+## Config summary
 
+```env
+VECTOR_BACKEND=pgvector
+DATABASE_URL=postgresql://...
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=...
+LANGSMITH_PROJECT=genai-rag
 ```
-OCR_ENABLED=false
-```
 
-Re-upload the scanned PDF → should fail with “No extractable text” (proves OCR was doing the work).
-
-## Tunable env vars
-
-| Var | Default | Meaning |
-|-----|---------|---------|
-| `RERANK_ENABLED` | true | Cross-encoder on/off |
-| `RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | HF model id |
-| `CANDIDATE_POOL` | 20 | Hybrid shortlist size before re-rank |
-| `TOP_K` | 4 | Chunks sent to the LLM |
-| `OCR_ENABLED` | true | OCR fallback on/off |
-| `OCR_MIN_CHARS` | 40 | Below this → treat page as scanned |
-| `OCR_DPI` | 200 | Render resolution for OCR |
-
-## Notes / gotchas
-
-- Re-ranker first load downloads ~80MB+ of weights; keep the process warm.
-- OCR is slower than digital text — expected for scans.
-- Old chunks without `user_id` stay invisible after auth — re-upload under your account.
-- Prefer backend on **8001** if 8000 still runs an old process.
+Toggle tracing off anytime with `LANGSMITH_TRACING=false`.

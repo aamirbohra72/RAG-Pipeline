@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     chroma_path: str = "./chroma_db"
     chroma_collection: str = "documents"
 
+    # Vector backend: "pgvector" (Neon) or "chroma" (local)
+    vector_backend: str = "pgvector"
+    database_url: str | None = None
+
+    # LangSmith monitoring (optional — get key at https://smith.langchain.com)
+    langsmith_tracing: bool = True
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "genai-rag"
+
     cors_origins: str = "http://localhost:3000"
 
     @property
