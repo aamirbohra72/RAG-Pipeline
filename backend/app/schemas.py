@@ -43,6 +43,24 @@ class UploadResponse(BaseModel):
     uploaded: List[UploadItem]
 
 
+class JobRef(BaseModel):
+    job_id: str
+    filename: str
+
+
+class AsyncUploadResponse(BaseModel):
+    jobs: List[JobRef]
+
+
+class JobStatus(BaseModel):
+    job_id: str
+    filename: Optional[str] = None
+    state: str  # PENDING | PROGRESS | SUCCESS | FAILURE
+    stage: Optional[str] = None
+    result: Optional[UploadItem] = None
+    error: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     status: str
     chroma_chunks: int  # indexed chunk count (legacy field name)
@@ -56,6 +74,8 @@ class HealthResponse(BaseModel):
     neon_ok: Optional[bool] = None
     langsmith_tracing: Optional[bool] = None
     langgraph_enabled: bool = True
+    async_ingest: bool = False
+    redis_ok: Optional[bool] = None
 
 
 class RegisterRequest(BaseModel):

@@ -31,6 +31,16 @@ type ChatTurn = {
   streaming?: boolean;
 };
 
+type IngestJob = {
+  job_id: string;
+  filename: string;
+  state: string; // PENDING | PROGRESS | SUCCESS | FAILURE
+  stage?: string;
+  error?: string | null;
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function authHeaders(token: string, json = false): HeadersInit {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (json) headers["Content-Type"] = "application/json";
@@ -47,6 +57,7 @@ export default function Home() {
 
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [history, setHistory] = useState<ChatTurn[]>([]);
@@ -141,6 +152,31 @@ export default function Home() {
     }
   };
 
+  const pollJob = useCallback(
+    async (jobId: string): Promise<IngestJob | null> => {
+      if (!token) return null;
+      // Poll until the task reaches a terminal state (or times out ~5 min).
+      for (let i = 0; i < 200; i++) {
+        const res = await fetch(`${API_URL}/jobs/${jobId}`, {
+          headers: authHeaders(token),
+        });
+        if (res.status === 401) {
+          logout();
+          return null;
+        }
+        if (!res.ok) throw new Error(await res.text());
+        const data: IngestJob = await res.json();
+
+        setJobs((prev) => prev.map((j) => (j.job_id === jobId ? { ...j, ...data } : j)));
+
+        if (data.state === "SUCCESS" || data.state === "FAILURE") return data;
+        await sleep(1500);
+      }
+      return null;
+    },
+    [token, logout],
+  );
+
   const handleUpload = async (fileList: FileList | File[] | null) => {
     if (!token || !fileList || (fileList as FileList).length === 0) return;
     setUploading(true);
@@ -149,7 +185,8 @@ export default function Home() {
     Array.from(fileList).forEach((file) => formData.append("files", file));
 
     try {
-      const res = await fetch(`${API_URL}/upload`, {
+      // Enqueue: the backend returns instantly with a job id per file.
+      const res = await fetch(`${API_URL}/upload/async`, {
         method: "POST",
         headers: authHeaders(token),
         body: formData,
@@ -159,7 +196,36 @@ export default function Home() {
         return;
       }
       if (!res.ok) throw new Error(await res.text());
+
+      const data = await res.json();
+      const newJobs: IngestJob[] = (data.jobs || []).map(
+        (j: { job_id: string; filename: string }) => ({
+          ...j,
+          state: "PENDING",
+          stage: "queued",
+        }),
+      );
+      setJobs((prev) => [...prev, ...newJobs]);
+
+      // Watch each job to completion, then refresh the library.
+      const results = await Promise.all(newJobs.map((j) => pollJob(j.job_id)));
+      const failed = results.filter((r) => r?.state === "FAILURE");
+      if (failed.length) {
+        setError(
+          "Some files failed: " +
+            failed.map((f) => `${f?.filename ?? "?"} (${f?.error ?? "error"})`).join(", "),
+        );
+      }
       await loadDocuments();
+
+      // Clear finished jobs from the panel after a short beat.
+      setTimeout(
+        () =>
+          setJobs((prev) =>
+            prev.filter((j) => j.state !== "SUCCESS" && j.state !== "FAILURE"),
+          ),
+        2500,
+      );
     } catch (err) {
       setError("Upload failed: " + (err as Error).message);
     } finally {
@@ -376,7 +442,7 @@ export default function Home() {
       >
         <label className="cursor-pointer">
           <span className="text-sm text-slate-600">
-            {uploading ? "Uploading & indexing..." : "Drop PDFs here, or click to browse"}
+            {uploading ? "Queueing for background indexing..." : "Drop PDFs here, or click to browse"}
           </span>
           <input
             type="file"
@@ -388,6 +454,37 @@ export default function Home() {
           />
         </label>
       </section>
+
+      {jobs.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-sm font-medium text-slate-700 mb-2">Processing</h2>
+          <ul className="space-y-1">
+            {jobs.map((job) => (
+              <li
+                key={job.job_id}
+                className="flex items-center justify-between text-sm bg-white border border-slate-200 rounded-md px-3 py-2"
+              >
+                <span className="truncate">{job.filename}</span>
+                <span
+                  className={`text-xs ml-3 shrink-0 ${
+                    job.state === "SUCCESS"
+                      ? "text-green-600"
+                      : job.state === "FAILURE"
+                        ? "text-red-600"
+                        : "text-slate-500"
+                  }`}
+                >
+                  {job.state === "SUCCESS"
+                    ? "indexed"
+                    : job.state === "FAILURE"
+                      ? "failed"
+                      : `${job.stage || "queued"}…`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mb-10">
         <h2 className="text-sm font-medium text-slate-700 mb-2">

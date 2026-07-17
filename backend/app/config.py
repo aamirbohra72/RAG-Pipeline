@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = None
     langsmith_project: str = "genai-rag"
 
+    # Async ingest via Celery + Redis (Upstash). rediss:// = TLS.
+    redis_url: str | None = None
+    async_ingest: bool = True
+    upload_dir: str = "./uploads"
+    celery_task_time_limit: int = 900  # hard limit per PDF (seconds)
+
     cors_origins: str = "http://localhost:3000"
 
     @property

@@ -150,3 +150,73 @@ LANGSMITH_PROJECT=genai-rag
 ```
 
 Toggle tracing off anytime with `LANGSMITH_TRACING=false`.
+
+---
+
+## Async PDF ingest — Celery + Upstash Redis
+
+Uploading a PDF triggers heavy work (OCR → chunk → embed → store). Doing it
+inline blocks the HTTP request and can time out on big/scanned files. Instead we
+push the work to a **Celery** worker using **Upstash Redis** as the broker +
+result backend. The API returns instantly with a job id; the frontend polls for
+progress.
+
+```mermaid
+flowchart LR
+  FE[Frontend] -->|POST /upload/async| API[FastAPI]
+  API -->|save temp PDF + enqueue| Redis[(Upstash Redis broker)]
+  API -->|job_id| FE
+  Worker[Celery worker] -->|BRPOP job| Redis
+  Worker -->|extract → chunk → embed| Mistral[Mistral embed]
+  Worker -->|store chunks| Neon[(Neon pgvector)]
+  Worker -->|state/result| Redis
+  FE -->|GET /jobs/id poll| API
+  API -->|AsyncResult| Redis
+```
+
+### Flow
+
+1. `POST /upload/async` — saves each PDF to `./uploads/{uuid}.pdf`, enqueues an
+   `ingest.process_pdf` task, returns `{ jobs: [{ job_id, filename }] }`.
+2. Worker runs the pipeline, reporting `PROGRESS` states
+   (`reading → extracting → chunking → embedding`) and deletes the temp file.
+3. `GET /jobs/{job_id}` — returns `state` (`PENDING`/`PROGRESS`/`SUCCESS`/`FAILURE`),
+   current `stage`, and on success the `UploadItem` result (chunks, OCR pages).
+
+The original synchronous `POST /upload` still exists as a fallback.
+
+### Config (`backend/.env`)
+
+```env
+ASYNC_INGEST=true
+# rediss:// = TLS (required by Upstash). /0 = db index.
+REDIS_URL=rediss://default:YOUR_UPSTASH_TOKEN@YOUR-DB.upstash.io:6379/0
+```
+
+### Run the worker (Windows)
+
+RQ needs `os.fork`, which Windows lacks, so we use Celery with the **solo** pool.
+Open a **second terminal** alongside uvicorn:
+
+```powershell
+cd backend
+venv\Scripts\activate
+celery -A app.celery_app.celery worker --pool=solo -l info
+```
+
+On Linux/macOS you can use the default prefork pool (drop `--pool=solo`).
+
+### Validate
+
+| Check | Expect |
+|-------|--------|
+| `GET /health` | `"async_ingest": true`, `"redis_ok": true` |
+| Worker startup log | `[tasks] . ingest.process_pdf` |
+| Upload a PDF in UI | returns immediately; a **Processing** row shows `extracting… → embedding…` |
+| Worker terminal | logs `Async ingest <file>: ... chunks=N` |
+| `GET /jobs/{id}` | `state` transitions to `SUCCESS` with `result.chunks` |
+| Stop the worker, upload again | job stays `PENDING` (proof the queue is decoupled) |
+
+> **Upstash note:** the free tier bills per command and caps connections.
+> The Celery config keeps usage modest (`broker_pool_limit=2`,
+> `worker_prefetch_multiplier=1`). Rotate the token you shared in chat.

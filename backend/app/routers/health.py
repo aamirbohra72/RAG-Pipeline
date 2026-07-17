@@ -29,6 +29,21 @@ async def health():
         except Exception:
             neon_ok = False
 
+    redis_ok = None
+    if settings.async_ingest and settings.redis_url:
+        try:
+            import ssl
+
+            import redis
+
+            kwargs = {}
+            if settings.redis_url.startswith("rediss://"):
+                kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED
+            client = redis.from_url(settings.redis_url, socket_connect_timeout=5, **kwargs)
+            redis_ok = bool(client.ping())
+        except Exception:
+            redis_ok = False
+
     return HealthResponse(
         status="ok" if neon_ok is not False else "degraded",
         chroma_chunks=vectorstore.chunk_count(),
@@ -42,4 +57,6 @@ async def health():
         neon_ok=neon_ok,
         langsmith_tracing=obs.get("langsmith_tracing"),
         langgraph_enabled=True,
+        async_ingest=bool(settings.async_ingest and settings.redis_url),
+        redis_ok=redis_ok,
     )
