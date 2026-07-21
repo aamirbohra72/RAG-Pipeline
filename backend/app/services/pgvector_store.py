@@ -77,8 +77,23 @@ def init_schema() -> None:
                 page INT NOT NULL,
                 content TEXT NOT NULL,
                 embedding vector({EMBEDDING_DIM}) NOT NULL,
+                doc_type TEXT NOT NULL DEFAULT 'pdf',
+                section TEXT NOT NULL DEFAULT '',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+            """
+        )
+        # Backfill columns on existing deployments
+        conn.execute(
+            """
+            ALTER TABLE document_chunks
+            ADD COLUMN IF NOT EXISTS doc_type TEXT NOT NULL DEFAULT 'pdf'
+            """
+        )
+        conn.execute(
+            """
+            ALTER TABLE document_chunks
+            ADD COLUMN IF NOT EXISTS section TEXT NOT NULL DEFAULT ''
             """
         )
         conn.execute(
@@ -125,6 +140,7 @@ def add_document(user_id: str, filename: str, chunks: List[Chunk]) -> dict:
         )
 
     rows = []
+    doc_type = chunks[0].doc_type if chunks else "pdf"
     for chunk, emb in zip(chunks, embeddings):
         rows.append(
             (
@@ -135,6 +151,8 @@ def add_document(user_id: str, filename: str, chunks: List[Chunk]) -> dict:
                 chunk.page,
                 chunk.text,
                 emb,
+                chunk.doc_type or doc_type,
+                chunk.section or "",
             )
         )
 
@@ -145,8 +163,9 @@ def add_document(user_id: str, filename: str, chunks: List[Chunk]) -> dict:
             cur.executemany(
                 """
                 INSERT INTO document_chunks
-                    (id, user_id, doc_id, filename, page, content, embedding)
-                VALUES (%s, %s, %s::uuid, %s, %s, %s, %s)
+                    (id, user_id, doc_id, filename, page, content, embedding,
+                     doc_type, section)
+                VALUES (%s, %s, %s::uuid, %s, %s, %s, %s, %s, %s)
                 """,
                 rows,
             )
@@ -175,7 +194,7 @@ def query_vectors(
         register_vector(conn)
         rows = conn.execute(
             """
-            SELECT id, content, filename, page, doc_id,
+            SELECT id, content, filename, page, doc_id, doc_type, section,
                    (embedding <=> %s::vector) AS distance
             FROM document_chunks
             WHERE user_id = %s
@@ -196,6 +215,8 @@ def query_vectors(
             "user_id": user_id,
             "filename": r["filename"],
             "page": int(r["page"]),
+            "doc_type": r.get("doc_type") or "pdf",
+            "section": r.get("section") or "",
         }
         for r in rows
     ]

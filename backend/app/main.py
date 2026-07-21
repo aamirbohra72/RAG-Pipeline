@@ -23,6 +23,10 @@ def create_app() -> FastAPI:
     configure_observability()
     init_db()
     init_vector_backend()
+    if get_settings().vector_backend == "pgvector":
+        from app.services.conversation_service import init_conversation_schema
+
+        init_conversation_schema()
 
     application = FastAPI(
         title="RAG Backend (Senior)",

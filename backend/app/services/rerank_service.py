@@ -55,10 +55,12 @@ def rerank(question: str, chunks: List["RetrievedChunk"], top_k: int) -> List["R
                     text=chunk.text,
                     filename=chunk.filename,
                     page=chunk.page,
+                    doc_id=chunk.doc_id,
                     score=round(score, 4),
                     vector_score=chunk.vector_score,
                     lexical_score=chunk.lexical_score,
                     rerank_score=round(score, 4),
+                    ingested_at=chunk.ingested_at,
                 )
             )
         rescored.sort(key=lambda c: c.score, reverse=True)

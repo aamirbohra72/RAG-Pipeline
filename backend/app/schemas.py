@@ -3,7 +3,16 @@ from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
+class CitationSpan(BaseModel):
+    """Character offsets within the retrieved chunk for frontend highlighting."""
+
+    start: int
+    end: int
+    text: str
+
+
 class Source(BaseModel):
+    doc_id: str = ""
     filename: str
     page: int
     snippet: str
@@ -11,11 +20,15 @@ class Source(BaseModel):
     rerank_score: Optional[float] = None
     vector_score: Optional[float] = None
     lexical_score: Optional[float] = None
+    relevance_score: Optional[float] = None
+    highlight: Optional[CitationSpan] = None
 
 
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1)
-    # Optional short chat history for multi-turn (senior RAG pattern)
+    # Persistent conversation id; omit to start a new thread
+    conversation_id: Optional[str] = None
+    # Optional inline history (overrides DB when non-empty — useful for MCP/clients)
     history: List[dict] = Field(default_factory=list)
     # [{"role": "user"|"assistant", "content": "..."}]
 
@@ -23,6 +36,9 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sources: List[Source]
+    conversation_id: Optional[str] = None
+    retrieval_query: Optional[str] = None
+    query_rewritten: bool = False
 
 
 class SearchRequest(BaseModel):
@@ -41,6 +57,8 @@ class SearchResultItem(BaseModel):
     rerank_score: Optional[float] = None
     vector_score: Optional[float] = None
     lexical_score: Optional[float] = None
+    relevance_score: Optional[float] = None
+    highlight: Optional[CitationSpan] = None
     citation_metadata: dict = Field(default_factory=dict)
 
 

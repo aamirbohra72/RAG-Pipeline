@@ -2,9 +2,10 @@
 LangGraph RAG orchestration.
 
 Graph:
-  START → retrieve → generate → END
+  START → rewrite → retrieve → generate → END
            ↘ (no docs) → empty_answer → END
 
+Query rewriting runs before retrieval (LangSmith: query_rewrite).
 Each node is traced in LangSmith when tracing is enabled.
 """
 
@@ -21,12 +22,15 @@ from langgraph.graph import END, START, StateGraph
 from app.schemas import Source
 from app.services import langchain_rag as lc
 from app.services.langchain_retriever import HybridRerankRetriever
+from app.services.query_rewrite_service import rewrite_query_if_needed
 
 logger = logging.getLogger(__name__)
 
 
 class RAGState(TypedDict, total=False):
     question: str
+    retrieval_query: str
+    query_rewritten: bool
     user_id: str
     history: list
     docs: List[Document]
@@ -35,11 +39,21 @@ class RAGState(TypedDict, total=False):
     answer: str
 
 
-def _retrieve_node(state: RAGState) -> dict:
+def _rewrite_node(state: RAGState) -> dict:
     question = state["question"]
+    history = state.get("history") or []
+    result = rewrite_query_if_needed(question, history)
+    return {
+        "retrieval_query": result["retrieval_query"],
+        "query_rewritten": result["was_rewritten"],
+    }
+
+
+def _retrieve_node(state: RAGState) -> dict:
+    retrieval_query = state.get("retrieval_query") or state["question"]
     user_id = state["user_id"]
     retriever = HybridRerankRetriever(user_id=user_id)
-    docs = retriever.invoke(question)
+    docs = retriever.invoke(retrieval_query)
     history = lc._history_to_messages(state.get("history"))
     return {
         "docs": docs,
@@ -78,11 +92,13 @@ def _empty_node(state: RAGState) -> dict:
 def build_rag_graph():
     """Compile the LangGraph StateGraph used for sync answers."""
     graph = StateGraph(RAGState)
+    graph.add_node("rewrite", _rewrite_node)
     graph.add_node("retrieve", _retrieve_node)
     graph.add_node("generate", _generate_node)
     graph.add_node("empty", _empty_node)
 
-    graph.add_edge(START, "retrieve")
+    graph.add_edge(START, "rewrite")
+    graph.add_edge("rewrite", "retrieve")
     graph.add_conditional_edges(
         "retrieve",
         _route_after_retrieve,
@@ -100,7 +116,7 @@ def get_rag_graph():
     global _graph
     if _graph is None:
         _graph = build_rag_graph()
-        logger.info("LangGraph RAG compiled (retrieve → generate | empty)")
+        logger.info("LangGraph RAG compiled (rewrite → retrieve → generate | empty)")
     return _graph
 
 
@@ -108,7 +124,7 @@ def answer_with_langgraph(
     question: str,
     user_id: str,
     history: Optional[List[dict]] = None,
-) -> tuple[str, List[Source]]:
+) -> tuple[str, List[Source], dict]:
     graph = get_rag_graph()
     logger.info("LangGraph RAG invoke user=%s", user_id)
     result = graph.invoke(
@@ -120,40 +136,59 @@ def answer_with_langgraph(
     )
     docs = result.get("docs") or []
     answer = result.get("answer") or ""
-    return answer, lc._sources_from_docs(docs)
+    meta = {
+        "retrieval_query": result.get("retrieval_query") or question,
+        "query_rewritten": bool(result.get("query_rewritten")),
+    }
+    return answer, lc._sources_from_docs(docs, question=question), meta
+
+
+def _run_rewrite_and_retrieve(
+    question: str,
+    user_id: str,
+    history: Optional[List[dict]] = None,
+) -> dict:
+    """Shared rewrite + retrieve path for sync and streaming."""
+    state: RAGState = {
+        "question": question,
+        "user_id": user_id,
+        "history": history or [],
+    }
+    rewritten = _rewrite_node(state)
+    state.update(rewritten)
+    retrieved = _retrieve_node(state)
+    state.update(retrieved)
+    return state
 
 
 def stream_with_langgraph(
     question: str,
     user_id: str,
     history: Optional[List[dict]] = None,
-) -> tuple[List[Source], Iterator[str]]:
+) -> tuple[List[Source], Iterator[str], dict]:
     """
-    Retrieve via LangGraph retrieve node (traced), then stream ChatMistralAI tokens
-    (also traced by LangSmith).
+    Rewrite + retrieve (traced), then stream ChatMistralAI tokens.
     """
-    # Run only retrieve path by invoking full graph would also generate —
-    # so call retrieve node logic directly (same code, still LangChain-traced retriever).
-    state: RAGState = {
-        "question": question,
-        "user_id": user_id,
-        "history": history or [],
+    state = _run_rewrite_and_retrieve(question, user_id, history)
+    docs = state.get("docs") or []
+    meta = {
+        "retrieval_query": state.get("retrieval_query") or question,
+        "query_rewritten": bool(state.get("query_rewritten")),
     }
-    retrieved = _retrieve_node(state)
-    docs = retrieved.get("docs") or []
+
     if not docs:
         def empty() -> Iterator[str]:
             yield "No documents have been uploaded yet."
 
-        return [], empty()
+        return [], empty(), meta
 
-    sources = lc._sources_from_docs(docs)
+    sources = lc._sources_from_docs(docs, question=state.get("retrieval_query") or question)
     prompt = lc.build_prompt()
     llm = lc.get_chat_llm(streaming=True)
     messages = prompt.format_messages(
         question=question,
-        context=retrieved.get("context") or "",
-        history=retrieved.get("chat_history") or [],
+        context=state.get("context") or "",
+        history=state.get("chat_history") or [],
     )
 
     logger.info("LangGraph RAG stream user=%s docs=%s", user_id, len(docs))
@@ -172,7 +207,7 @@ def stream_with_langgraph(
                     elif isinstance(block, str):
                         yield block
 
-    return sources, token_iter()
+    return sources, token_iter(), meta
 
 
 def langgraph_info() -> dict:
@@ -184,6 +219,6 @@ def langgraph_info() -> dict:
         version = "unavailable"
     return {
         "langgraph_version": version,
-        "graph": "retrieve -> generate | empty",
+        "graph": "rewrite → retrieve → generate | empty",
         "state": "RAGState",
     }

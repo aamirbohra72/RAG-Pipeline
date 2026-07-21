@@ -22,7 +22,8 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_mistralai import ChatMistralAI
 
 from app.config import get_settings
-from app.schemas import Source
+from app.schemas import CitationSpan, Source
+from app.services.citation_service import find_highlight_span, normalize_relevance_score
 from app.services.langchain_retriever import HybridRerankRetriever
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,9 @@ def _format_docs(docs: List[Document]) -> str:
 
 def _history_to_messages(history: Optional[List[dict]]) -> List[BaseMessage]:
     messages: List[BaseMessage] = []
-    for turn in (history or [])[-6:]:
+    settings = get_settings()
+    limit = settings.chat_history_turns
+    for turn in (history or [])[-limit:]:
         role = turn.get("role")
         content = turn.get("content")
         if not content:
@@ -73,19 +76,32 @@ def _history_to_messages(history: Optional[List[dict]]) -> List[BaseMessage]:
     return messages
 
 
-def _sources_from_docs(docs: List[Document]) -> List[Source]:
+def _sources_from_docs(
+    docs: List[Document],
+    question: str = "",
+) -> List[Source]:
     sources: List[Source] = []
     for doc in docs:
         meta = doc.metadata or {}
+        rerank_score = meta.get("rerank_score")
+        hybrid_score = meta.get("score")
+        span = find_highlight_span(question, doc.page_content)
         sources.append(
             Source(
+                doc_id=str(meta.get("doc_id") or ""),
                 filename=str(meta.get("filename", "unknown")),
                 page=int(meta.get("page", 0) or 0),
                 snippet=doc.page_content[:220],
-                score=meta.get("score"),
-                rerank_score=meta.get("rerank_score"),
+                score=hybrid_score,
+                rerank_score=rerank_score,
                 vector_score=meta.get("vector_score"),
                 lexical_score=meta.get("lexical_score"),
+                relevance_score=normalize_relevance_score(rerank_score, hybrid_score),
+                highlight=CitationSpan(
+                    start=span.start,
+                    end=span.end,
+                    text=span.text,
+                ),
             )
         )
     return sources
@@ -158,7 +174,7 @@ def answer_with_langchain(
             "history": _history_to_messages(history),
         }
     )
-    return answer, _sources_from_docs(docs)
+    return answer, _sources_from_docs(docs, question=question)
 
 
 def stream_with_langchain(
@@ -180,7 +196,7 @@ def stream_with_langchain(
         context=_format_docs(docs),
         history=_history_to_messages(history),
     )
-    sources = _sources_from_docs(docs)
+    sources = _sources_from_docs(docs, question=question)
 
     logger.info(
         "LangChain RAG stream: %s docs user=%s engine=ChatMistralAI",

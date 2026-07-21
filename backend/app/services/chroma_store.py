@@ -29,6 +29,8 @@ def add_document(user_id: str, filename: str, chunks: List[Chunk]) -> dict:
             "user_id": user_id,
             "filename": filename,
             "page": c.page,
+            "doc_type": c.doc_type,
+            "section": c.section,
         }
         for c in chunks
     ]

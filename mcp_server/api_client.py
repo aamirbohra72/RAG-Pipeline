@@ -72,10 +72,13 @@ class RagApiClient:
         self,
         query: str,
         history: list[dict[str, str]] | None = None,
+        conversation_id: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"question": query}
         if history:
             payload["history"] = history
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
         return await self._request("POST", "/query", json=payload)
 
     async def list_documents(self) -> dict[str, Any]:

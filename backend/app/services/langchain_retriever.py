@@ -38,6 +38,7 @@ class HybridRerankRetriever(BaseRetriever):
                 Document(
                     page_content=c.text,
                     metadata={
+                        "doc_id": c.doc_id,
                         "filename": c.filename,
                         "page": c.page,
                         "score": c.score,

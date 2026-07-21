@@ -1,9 +1,7 @@
 """
-Background ingest pipeline: extract (OCR fallback) -> chunk -> embed -> store.
+Background ingest pipeline: extract → chunk → embed → store.
 
-The web process saves the uploaded PDF to disk and enqueues this task with the
-file path. The worker reads the file, runs the full pipeline, updates progress
-via Celery state, and deletes the temp file when done.
+Supports PDF, Markdown, HTML, CSV, and XLSX via ingest_service.
 """
 
 from __future__ import annotations
@@ -13,19 +11,16 @@ from pathlib import Path
 
 from app.celery_app import celery
 from app.services import vectorstore
-from app.services.chunking_service import chunk_pages
-from app.services.pdf_service import extract_pages
+from app.services.ingest_service import ingest_bytes
 
 logger = logging.getLogger(__name__)
 
 
-@celery.task(bind=True, name="ingest.process_pdf")
-def process_pdf(self, user_id: str, filename: str, file_path: str) -> dict:
-    """Run the ingest pipeline for a single PDF and return an UploadItem-shaped dict."""
+def _run_ingest(task, user_id: str, filename: str, file_path: str) -> dict:
     path = Path(file_path)
 
     def progress(stage: str, **extra) -> None:
-        self.update_state(
+        task.update_state(
             state="PROGRESS",
             meta={"stage": stage, "filename": filename, **extra},
         )
@@ -37,30 +32,31 @@ def process_pdf(self, user_id: str, filename: str, file_path: str) -> dict:
             raise ValueError(f"{filename} is empty")
 
         progress("extracting")
-        extraction = extract_pages(file_bytes)
-
-        progress("chunking", text_pages=extraction.text_pages, ocr_pages=extraction.ocr_pages)
-        chunks = chunk_pages(extraction.pages)
-
-        progress("embedding", chunks=len(chunks))
-        result = vectorstore.add_document(user_id, filename, chunks)
+        progress("chunking")
+        progress("embedding")
+        result = ingest_bytes(user_id, filename, file_bytes, vectorstore)
 
         logger.info(
             "Async ingest %s: text_pages=%s ocr_pages=%s chunks=%s",
             filename,
-            extraction.text_pages,
-            extraction.ocr_pages,
+            result.get("text_pages", 0),
+            result.get("ocr_pages", 0),
             result["chunks"],
         )
-        return {
-            **result,
-            "filename": filename,
-            "text_pages": extraction.text_pages,
-            "ocr_pages": extraction.ocr_pages,
-        }
+        return {**result, "filename": filename}
     finally:
-        # Always clean up the temp upload, even on failure
         try:
             path.unlink(missing_ok=True)
         except OSError:
             logger.warning("Could not delete temp upload %s", file_path)
+
+
+@celery.task(bind=True, name="ingest.process_document")
+def process_document(self, user_id: str, filename: str, file_path: str) -> dict:
+    return _run_ingest(self, user_id, filename, file_path)
+
+
+@celery.task(bind=True, name="ingest.process_pdf")
+def process_pdf(self, user_id: str, filename: str, file_path: str) -> dict:
+    """Backward-compatible alias for existing workers."""
+    return _run_ingest(self, user_id, filename, file_path)

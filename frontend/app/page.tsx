@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const TOKEN_KEY = "rag_access_token";
 const USER_KEY = "rag_user";
+const CONVERSATION_KEY = "rag_conversation_id";
 
 type User = { id: string; email: string };
 
@@ -15,6 +16,7 @@ type Document = {
 };
 
 type Source = {
+  doc_id?: string;
   filename: string;
   page: number;
   snippet: string;
@@ -22,6 +24,8 @@ type Source = {
   rerank_score?: number | null;
   vector_score?: number | null;
   lexical_score?: number | null;
+  relevance_score?: number | null;
+  highlight?: { start: number; end: number; text: string } | null;
 };
 
 type ChatTurn = {
@@ -61,6 +65,7 @@ export default function Home() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [history, setHistory] = useState<ChatTurn[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -77,6 +82,8 @@ export default function Home() {
         localStorage.removeItem(USER_KEY);
       }
     }
+    const savedConversation = localStorage.getItem(CONVERSATION_KEY);
+    if (savedConversation) setConversationId(savedConversation);
   }, []);
 
   const logout = useCallback(() => {
@@ -263,10 +270,16 @@ export default function Home() {
     setHistory((prev) => [...prev, { question: q, answer: "", sources: [], streaming: true }]);
 
     try {
+      const payload: { question: string; conversation_id?: string; history?: typeof priorHistory } = {
+        question: q,
+      };
+      if (conversationId) payload.conversation_id = conversationId;
+      else payload.history = priorHistory.slice(-6);
+
       const res = await fetch(`${API_URL}/query/stream`, {
         method: "POST",
         headers: authHeaders(token, true),
-        body: JSON.stringify({ question: q, history: priorHistory.slice(-6) }),
+        body: JSON.stringify(payload),
       });
 
       if (res.status === 401) {
@@ -295,6 +308,10 @@ export default function Home() {
 
           if (event.type === "sources") {
             sources = event.sources || [];
+            if (event.conversation_id) {
+              setConversationId(event.conversation_id);
+              localStorage.setItem(CONVERSATION_KEY, event.conversation_id);
+            }
             setHistory((prev) => {
               const next = [...prev];
               next[next.length - 1] = { ...next[next.length - 1], sources };
@@ -547,18 +564,27 @@ export default function Home() {
               {turn.sources.length > 0 && (
                 <div className="text-xs text-slate-500 space-y-1 border-t border-slate-100 pt-2">
                   <p className="font-medium text-slate-600">Sources</p>
-                  {turn.sources.map((s, j) => (
-                    <p key={j}>
-                      {s.filename} (page {s.page})
-                      {typeof s.rerank_score === "number"
-                        ? ` · rerank ${s.rerank_score.toFixed(3)}`
-                        : typeof s.score === "number"
-                          ? ` · score ${s.score.toFixed(3)}`
-                          : ""}
-                      {" — "}
-                      &ldquo;{s.snippet}…&rdquo;
-                    </p>
-                  ))}
+                  {turn.sources.map((s, j) => {
+                    const relevance =
+                      typeof s.relevance_score === "number" ? s.relevance_score : null;
+                    const opacity =
+                      relevance === null ? "opacity-100" : relevance >= 0.7 ? "opacity-100" : relevance >= 0.45 ? "opacity-70" : "opacity-40";
+                    const excerpt = s.highlight?.text || s.snippet;
+                    return (
+                      <p key={j} className={opacity}>
+                        {s.filename} (page {s.page})
+                        {relevance !== null
+                          ? ` · relevance ${(relevance * 100).toFixed(0)}%`
+                          : typeof s.rerank_score === "number"
+                            ? ` · rerank ${s.rerank_score.toFixed(3)}`
+                            : typeof s.score === "number"
+                              ? ` · score ${s.score.toFixed(3)}`
+                              : ""}
+                        {" — "}
+                        &ldquo;{excerpt}{excerpt.length >= 220 ? "…" : ""}&rdquo;
+                      </p>
+                    );
+                  })}
                 </div>
               )}
             </div>

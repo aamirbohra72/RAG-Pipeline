@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "description": "40 hand-verified queries against novagrid_report.pdf and Ecommerce_purchases_Item_name.pdf.",
+  "documents": {
+    "novagrid_report.pdf": "df17a6a5-8530-4a44-8d02-468bbe8fe09d",
+    "Ecommerce_purchases_Item_name.pdf": "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+  },
+  "examples": [
+    {
+      "id": "q01",
+      "question": "When was NovaGrid Energy Solutions founded and where?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "NovaGrid was founded in 2011 in Portland, Oregon."
+    },
+    {
+      "id": "q02",
+      "question": "Who founded NovaGrid?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Engineers Daniela Ferro and Marcus Whitlock founded NovaGrid."
+    },
+    {
+      "id": "q03",
+      "question": "What products does NovaGrid manufacture?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Battery storage systems, solar inverters, and smart grid management software."
+    },
+    {
+      "id": "q04",
+      "question": "How many employees did NovaGrid have at the end of fiscal 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "1,842 employees across four countries."
+    },
+    {
+      "id": "q05",
+      "question": "In which countries does NovaGrid operate?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "United States, Canada, Germany, and Japan."
+    },
+    {
+      "id": "q06",
+      "question": "Where is NovaGrid's European logistics hub?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Rotterdam, Netherlands, opened in 2022."
+    },
+    {
+      "id": "q07",
+      "question": "What is NovaGrid's mission statement?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "To make clean, reliable energy storage accessible to every household and business."
+    },
+    {
+      "id": "q08",
+      "question": "What is the storage capacity of NovaCell Home 10?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "10 kWh with a starting price of $7,999."
+    },
+    {
+      "id": "q09",
+      "question": "What was NovaGrid's best-selling product in fiscal 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "NovaCell Home 20, accounting for 41% of unit sales."
+    },
+    {
+      "id": "q10",
+      "question": "How many GridPilot Software subscribers did NovaGrid have by December 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "58,000 active subscribers."
+    },
+    {
+      "id": "q11",
+      "question": "What was NovaGrid total revenue in fiscal year 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$412.6 million, up 18% from 2024."
+    },
+    {
+      "id": "q12",
+      "question": "What was NovaGrid net income in fiscal 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$37.9 million."
+    },
+    {
+      "id": "q13",
+      "question": "How much did NovaGrid spend on R&D in 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$35.7 million."
+    },
+    {
+      "id": "q14",
+      "question": "What was NovaGrid's largest expense category in 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Manufacturing and materials at $198.3 million."
+    },
+    {
+      "id": "q15",
+      "question": "When did NovaGrid open its Reno manufacturing plant?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "2019."
+    },
+    {
+      "id": "q16",
+      "question": "What is the starting price of NovaCell Home 20?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$13,499."
+    },
+    {
+      "id": "q17",
+      "question": "What commercial battery product does NovaGrid offer and at what capacity?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "NovaGrid Commercial X at 100 kWh, starting at $62,000."
+    },
+    {
+      "id": "q18",
+      "question": "When was the SolarSync Inverter II launched?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "2023 at $1,850 starting price."
+    },
+    {
+      "id": "q19",
+      "question": "What share buyback program did NovaGrid's board approve?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "A $50 million share buyback program in November 2025."
+    },
+    {
+      "id": "q20",
+      "question": "What was NovaGrid revenue in fiscal 2023?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$302.1 million."
+    },
+    {
+      "id": "q21",
+      "question": "What analytics report source shows ecommerce item names?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "Wilco Farmstore Analytics ecommerce purchases by item name."
+    },
+    {
+      "id": "q22",
+      "question": "What date range does the ecommerce purchases report cover?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "July 14, 2026 (single day custom range)."
+    },
+    {
+      "id": "q23",
+      "question": "How many total items were viewed in the ecommerce report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "4,503 items viewed."
+    },
+    {
+      "id": "q24",
+      "question": "How many items were purchased according to the ecommerce report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "18 items purchased."
+    },
+    {
+      "id": "q25",
+      "question": "What was total item revenue in the ecommerce purchases report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "$1,296.15."
+    },
+    {
+      "id": "q26",
+      "question": "What is the top viewed item in the ecommerce purchases report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "Cornerstone Plus Glyphosate Herbicide, 2.5 gal."
+    },
+    {
+      "id": "q27",
+      "question": "Which RuffWear product appears in the top ecommerce items list?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "RuffWear Black Grip Trex Dog Shoes and Blue Pool Front Range Dog Harness among others."
+    },
+    {
+      "id": "q28",
+      "question": "How many items were added to cart in the ecommerce report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "172 items added to cart."
+    },
+    {
+      "id": "q29",
+      "question": "What Weatherbeeta dog coat appears in the ecommerce top items?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "Weatherbeeta Orange ComFiTec Reflective 300D Deluxe Showerproof Dog Coat."
+    },
+    {
+      "id": "q30",
+      "question": "What pine shavings product is listed in the ecommerce report?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "KSHOW ShowFlake White Pine Shavings, 12 cu ft."
+    },
+    {
+      "id": "q31",
+      "question": "Compare NovaGrid 2024 and 2025 revenue growth.",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Revenue grew from $349.5M in 2024 to $412.6M in 2025, an 18% increase."
+    },
+    {
+      "id": "q32",
+      "question": "What subscription product does NovaGrid sell monthly?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "GridPilot Software at $49/month."
+    },
+    {
+      "id": "q33",
+      "question": "How many rows are in the ecommerce item name report table?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "255,410 rows total (paginated 1-10 shown)."
+    },
+    {
+      "id": "q34",
+      "question": "What pet product brand appears multiple times in ecommerce top items?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "RuffWear appears multiple times with harnesses, shoes, and packs."
+    },
+    {
+      "id": "q35",
+      "question": "What was NovaGrid net income in 2022?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "$15.6 million."
+    },
+    {
+      "id": "q36",
+      "question": "What layer feed product appears in the ecommerce list?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "Scratch & Peck Naturally Free Layer Mash, 40 lb."
+    },
+    {
+      "id": "q37",
+      "question": "When was NovaGrid's mission statement adopted?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "2020."
+    },
+    {
+      "id": "q38",
+      "question": "What K&H Pet Products item is in the ecommerce top ten?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "K & H Pet Products Charcoal Original Pet Cot - Medium, Gray."
+    },
+    {
+      "id": "q39",
+      "question": "What percentage of ecommerce views did the top herbicide item represent?",
+      "expected_doc_ids": [
+        "8be4ad7b-b09f-4955-baca-c24b6e0bbf3b"
+      ],
+      "expected_answer": "21 views representing 0.47% of total views."
+    },
+    {
+      "id": "q40",
+      "question": "What was NovaGrid sales and marketing spend category size in 2025?",
+      "expected_doc_ids": [
+        "df17a6a5-8530-4a44-8d02-468bbe8fe09d"
+      ],
+      "expected_answer": "Sales and marketing was $89.4 million, the second largest expense."
+    }
+  ]
+}

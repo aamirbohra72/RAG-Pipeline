@@ -8,9 +8,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.schemas import SearchRequest, SearchResponse, SearchResultItem
+from app.schemas import CitationSpan, SearchRequest, SearchResponse, SearchResultItem
 from app.services import retrieval, vectorstore
 from app.services.auth_service import User, get_current_user
+from app.services.citation_service import find_highlight_span, normalize_relevance_score
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["search"])
@@ -65,6 +66,9 @@ async def search_documents(
             continue
         if eligible_doc_ids is not None and chunk.doc_id not in eligible_doc_ids:
             continue
+        highlight = find_highlight_span(query, chunk.text)
+        relevance = normalize_relevance_score(chunk.rerank_score, chunk.score)
+        span = CitationSpan(start=highlight.start, end=highlight.end, text=highlight.text)
         results.append(
             SearchResultItem(
                 content=chunk.text,
@@ -75,10 +79,14 @@ async def search_documents(
                 rerank_score=chunk.rerank_score,
                 vector_score=chunk.vector_score,
                 lexical_score=chunk.lexical_score,
+                relevance_score=relevance,
+                highlight=span,
                 citation_metadata={
                     "filename": chunk.filename,
                     "page": chunk.page,
                     "doc_id": chunk.doc_id,
+                    "relevance_score": relevance,
+                    "highlight": span.model_dump(),
                 },
             )
         )

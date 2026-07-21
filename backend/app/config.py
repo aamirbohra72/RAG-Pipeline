@@ -27,11 +27,22 @@ class Settings(BaseSettings):
     chunk_size: int = 2000
     chunk_overlap: int = 200
 
+    # Multi-turn chat: load last N messages from Postgres before each query
+    chat_history_turns: int = 6
+
+    # Query rewrite for follow-ups (small/fast model, traced as query_rewrite)
+    rewrite_enabled: bool = True
+    rewrite_model: str = "mistral-small-latest"
+
     # Retrieval: pull a wider vector candidate pool, then hybrid + cross-encoder
     top_k: int = 4
-    candidate_pool: int = 20
+    candidate_pool: int = 40
     hybrid_vector_weight: float = 0.65
     hybrid_lexical_weight: float = 0.35
+    # Drop chunks below this sigmoid(relevance) before generation (blocks 0% noise)
+    min_relevance_score: float = 0.2
+    # Prefer diverse source docs in the final top_k (helps when one XLSX floods the pool)
+    max_chunks_per_doc: int = 2
 
     rerank_enabled: bool = True
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"

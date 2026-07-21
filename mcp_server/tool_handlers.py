@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from mcp_server.api_client import RagApiClient
-from mcp_server.conversations import conversation_store
 from mcp_server.errors import RagApiError
 
 
@@ -78,8 +77,10 @@ async def handle_ask_question(
     query: str,
     conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    history = conversation_store.get_history(conversation_id)
-    data = await client.ask_question(query=query, history=history)
+    data = await client.ask_question(
+        query=query,
+        conversation_id=conversation_id,
+    )
     answer = data.get("answer", "")
     sources = data.get("sources") or []
     citations = [
@@ -87,19 +88,20 @@ async def handle_ask_question(
             "doc_id": src.get("doc_id") or "",
             "source": src.get("filename", ""),
             "excerpt": src.get("snippet", ""),
+            "relevance_score": src.get("relevance_score"),
+            "highlight": src.get("highlight"),
+            "rerank_score": src.get("rerank_score"),
         }
         for src in sources
     ]
-    new_conversation_id = conversation_store.append_turn(
-        conversation_id,
-        user_message=query,
-        assistant_message=answer,
-    )
+    new_conversation_id = data.get("conversation_id") or conversation_id or ""
     return {
         "answer": answer,
         "citations": citations,
         "confidence": _derive_confidence(sources),
         "conversation_id": new_conversation_id,
+        "retrieval_query": data.get("retrieval_query"),
+        "query_rewritten": data.get("query_rewritten", False),
     }
 
 
