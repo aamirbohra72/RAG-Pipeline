@@ -10,7 +10,13 @@ from mcp_server.server import create_server
 
 def run_stdio() -> None:
     """Run MCP over stdio (default for Claude Desktop / Cursor)."""
-    settings = get_settings()
+    import logging
+
+    # Cursor/Claude speak JSON-RPC over stdout — keep stdio clean.
+    logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
+    for name in ("mcp", "fastmcp", "httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
     server = create_server()
     server.run(transport="stdio")
 

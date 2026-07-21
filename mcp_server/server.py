@@ -142,10 +142,4 @@ async def get_ingestion_status(job_id: str) -> str:
 
 def create_server() -> FastMCP:
     """Factory for tests and alternate transports."""
-    settings = get_settings()
-    print(
-        f"RAG MCP server configured for {settings.rag_api_base_url} "
-        f"(transport={settings.transport})",
-        file=sys.stderr,
-    )
     return mcp
