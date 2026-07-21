@@ -69,6 +69,11 @@ def query_vectors(
     )
 
 
+def get_document_ingest_dates(user_id: str) -> dict:
+    """Chroma backend does not persist ingest timestamps."""
+    return {}
+
+
 def list_documents(user_id: str) -> List[dict]:
     collection = get_chroma_collection()
     items = collection.get(where={"user_id": user_id}, include=["metadatas"])

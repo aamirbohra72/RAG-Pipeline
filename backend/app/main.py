@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import auth, documents, health, jobs, query, upload
+from app.routers import auth, documents, health, jobs, query, search, upload
 from app.services.auth_service import init_db
 from app.services.observability import configure_observability
 from app.services.vectorstore import init_vector_backend
@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     application.include_router(upload.router)
     application.include_router(jobs.router)
     application.include_router(query.router)
+    application.include_router(search.router)
     application.include_router(documents.router)
 
     return application

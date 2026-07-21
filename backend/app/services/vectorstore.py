@@ -52,6 +52,10 @@ def list_documents(user_id: str) -> List[dict]:
     return _backend().list_documents(user_id)
 
 
+def get_document_ingest_dates(user_id: str) -> Dict[str, Any]:
+    return _backend().get_document_ingest_dates(user_id)
+
+
 def delete_document(user_id: str, doc_id: str) -> bool:
     return _backend().delete_document(user_id, doc_id)
 

@@ -25,6 +25,29 @@ class QueryResponse(BaseModel):
     sources: List[Source]
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+    doc_type: Optional[str] = None
+    date_after: Optional[str] = None  # ISO-8601 date or datetime
+
+
+class SearchResultItem(BaseModel):
+    content: str
+    source: str
+    doc_id: str
+    page: int
+    score: float
+    rerank_score: Optional[float] = None
+    vector_score: Optional[float] = None
+    lexical_score: Optional[float] = None
+    citation_metadata: dict = Field(default_factory=dict)
+
+
+class SearchResponse(BaseModel):
+    results: List[SearchResultItem]
+
+
 class DocumentInfo(BaseModel):
     doc_id: str
     filename: str

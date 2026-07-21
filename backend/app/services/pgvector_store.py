@@ -44,10 +44,15 @@ def _database_url() -> str:
 def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
+        # Neon serverless closes idle SSL connections; recycle and health-check
+        # pooled connections to avoid "SSL connection has been closed unexpectedly".
         _pool = ConnectionPool(
             conninfo=_database_url(),
             min_size=1,
             max_size=5,
+            max_lifetime=300,
+            max_idle=60,
+            check=ConnectionPool.check_connection,
             kwargs={"row_factory": dict_row, "autocommit": True},
             open=True,
         )
@@ -208,7 +213,8 @@ def list_documents(user_id: str) -> List[dict]:
     with pool.connection() as conn:
         rows = conn.execute(
             """
-            SELECT doc_id::text AS doc_id, filename, COUNT(*)::int AS chunks
+            SELECT doc_id::text AS doc_id, filename, COUNT(*)::int AS chunks,
+                   MIN(created_at) AS ingested_at
             FROM document_chunks
             WHERE user_id = %s
             GROUP BY doc_id, filename
@@ -217,9 +223,29 @@ def list_documents(user_id: str) -> List[dict]:
             (user_id,),
         ).fetchall()
     return [
-        {"doc_id": r["doc_id"], "filename": r["filename"], "chunks": r["chunks"]}
+        {
+            "doc_id": r["doc_id"],
+            "filename": r["filename"],
+            "chunks": r["chunks"],
+            "ingested_at": r["ingested_at"].isoformat() if r.get("ingested_at") else None,
+        }
         for r in rows
     ]
+
+
+def get_document_ingest_dates(user_id: str) -> Dict[str, Any]:
+    pool = get_pool()
+    with pool.connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT doc_id::text AS doc_id, MIN(created_at) AS ingested_at
+            FROM document_chunks
+            WHERE user_id = %s
+            GROUP BY doc_id
+            """,
+            (user_id,),
+        ).fetchall()
+    return {r["doc_id"]: r["ingested_at"] for r in rows}
 
 
 def delete_document(user_id: str, doc_id: str) -> bool:

@@ -25,10 +25,12 @@ class RetrievedChunk:
     text: str
     filename: str
     page: int
+    doc_id: str
     score: float
     vector_score: float
     lexical_score: float
     rerank_score: Optional[float] = None
+    ingested_at: Optional[str] = None
 
 
 def _tokenize(text: str) -> set[str]:
@@ -49,8 +51,13 @@ def _distance_to_similarity(distance: float | None) -> float:
     return max(0.0, min(1.0, 1.0 - float(distance)))
 
 
-def retrieve(question: str, user_id: str) -> List[RetrievedChunk]:
+def retrieve(
+    question: str,
+    user_id: str,
+    top_k: int | None = None,
+) -> List[RetrievedChunk]:
     settings = get_settings()
+    final_k = top_k if top_k is not None else settings.top_k
     query_embedding = embed_texts([question])[0]
 
     raw = vectorstore.query_vectors(
@@ -74,16 +81,19 @@ def retrieve(question: str, user_id: str) -> List[RetrievedChunk]:
             settings.hybrid_vector_weight * vec
             + settings.hybrid_lexical_weight * lex
         )
+        ingested = meta.get("created_at")
         fused.append(
             RetrievedChunk(
                 text=doc,
                 filename=meta["filename"],
                 page=int(meta["page"]),
+                doc_id=str(meta.get("doc_id") or ""),
                 score=round(score, 4),
                 vector_score=round(vec, 4),
                 lexical_score=round(lex, 4),
+                ingested_at=str(ingested) if ingested is not None else None,
             )
         )
 
     fused.sort(key=lambda c: c.score, reverse=True)
-    return rerank(question, fused, settings.top_k)
+    return rerank(question, fused, final_k)
