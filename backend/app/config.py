@@ -66,8 +66,12 @@ class Settings(BaseSettings):
     langsmith_project: str = "genai-rag"
 
     # Async ingest via Celery + Redis (Upstash). rediss:// = TLS.
+    # Use the Redis protocol URL from Upstash (not REST URL).
     redis_url: str | None = None
     async_ingest: bool = True
+    # Upstash on Windows often fails with CERT_REQUIRED (expired/local CA).
+    # none | optional | required
+    redis_ssl_cert_reqs: str = "none"
     upload_dir: str = "./uploads"
     celery_task_time_limit: int = 900  # hard limit per PDF (seconds)
 

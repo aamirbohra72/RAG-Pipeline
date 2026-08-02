@@ -36,9 +36,17 @@ async def health():
 
             import redis
 
+            cert_map = {
+                "none": ssl.CERT_NONE,
+                "optional": ssl.CERT_OPTIONAL,
+                "required": ssl.CERT_REQUIRED,
+            }
             kwargs = {}
             if settings.redis_url.startswith("rediss://"):
-                kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED
+                kwargs["ssl_cert_reqs"] = cert_map.get(
+                    (settings.redis_ssl_cert_reqs or "none").lower(),
+                    ssl.CERT_NONE,
+                )
             client = redis.from_url(settings.redis_url, socket_connect_timeout=5, **kwargs)
             redis_ok = bool(client.ping())
         except Exception:

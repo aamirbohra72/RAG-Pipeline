@@ -3,6 +3,8 @@ Celery application using Upstash Redis as broker + result backend.
 
 Windows note: run the worker with the solo pool (no fork):
   celery -A app.celery_app.celery worker --pool=solo -l info
+
+Use the Upstash *Redis* URL (rediss://...), not the REST URL.
 """
 
 from __future__ import annotations
@@ -15,6 +17,15 @@ from celery import Celery
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _ssl_cert_reqs(value: str):
+    mapping = {
+        "none": ssl.CERT_NONE,
+        "optional": ssl.CERT_OPTIONAL,
+        "required": ssl.CERT_REQUIRED,
+    }
+    return mapping.get((value or "none").lower(), ssl.CERT_NONE)
 
 
 def _build_celery() -> Celery:
@@ -42,9 +53,13 @@ def _build_celery() -> Celery:
 
     # TLS for Upstash (rediss://)
     if broker and broker.startswith("rediss://"):
-        ssl_opts = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+        ssl_opts = {"ssl_cert_reqs": _ssl_cert_reqs(settings.redis_ssl_cert_reqs)}
         app.conf.broker_use_ssl = ssl_opts
         app.conf.redis_backend_use_ssl = ssl_opts
+        logger.info(
+            "Celery Redis TLS enabled (ssl_cert_reqs=%s)",
+            settings.redis_ssl_cert_reqs,
+        )
 
     # Ensure tasks are registered
     app.autodiscover_tasks(["app.tasks"])
