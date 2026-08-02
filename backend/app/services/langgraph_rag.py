@@ -31,6 +31,7 @@ class RAGState(TypedDict, total=False):
     question: str
     retrieval_query: str
     query_rewritten: bool
+    resolved_entity: str
     user_id: str
     history: list
     docs: List[Document]
@@ -46,6 +47,7 @@ def _rewrite_node(state: RAGState) -> dict:
     return {
         "retrieval_query": result["retrieval_query"],
         "query_rewritten": result["was_rewritten"],
+        "resolved_entity": result.get("resolved_entity") or "",
     }
 
 
@@ -139,6 +141,7 @@ def answer_with_langgraph(
     meta = {
         "retrieval_query": result.get("retrieval_query") or question,
         "query_rewritten": bool(result.get("query_rewritten")),
+        "resolved_entity": result.get("resolved_entity") or None,
     }
     return answer, lc._sources_from_docs(docs, question=question), meta
 
@@ -174,6 +177,7 @@ def stream_with_langgraph(
     meta = {
         "retrieval_query": state.get("retrieval_query") or question,
         "query_rewritten": bool(state.get("query_rewritten")),
+        "resolved_entity": state.get("resolved_entity") or None,
     }
 
     if not docs:

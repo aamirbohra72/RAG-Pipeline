@@ -33,6 +33,8 @@ type ChatTurn = {
   answer: string;
   sources: Source[];
   streaming?: boolean;
+  retrieval_query?: string | null;
+  query_rewritten?: boolean;
 };
 
 type IngestJob = {
@@ -82,16 +84,26 @@ export default function Home() {
         localStorage.removeItem(USER_KEY);
       }
     }
-    const savedConversation = localStorage.getItem(CONVERSATION_KEY);
-    if (savedConversation) setConversationId(savedConversation);
+    // Always start a fresh conversation id on load — avoids stale Neon rows
+    localStorage.removeItem(CONVERSATION_KEY);
+    setConversationId(null);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(CONVERSATION_KEY);
     setToken(null);
     setUser(null);
     setDocuments([]);
+    setHistory([]);
+    setConversationId(null);
+    setError("");
+  }, []);
+
+  const startNewChat = useCallback(() => {
+    localStorage.removeItem(CONVERSATION_KEY);
+    setConversationId(null);
     setHistory([]);
     setError("");
   }, []);
@@ -147,8 +159,10 @@ export default function Home() {
 
       localStorage.setItem(TOKEN_KEY, data.access_token);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      localStorage.removeItem(CONVERSATION_KEY);
       setToken(data.access_token);
       setUser(data.user);
+      setConversationId(null);
       setPassword("");
       setHistory([]);
     } catch (err) {
@@ -192,12 +206,47 @@ export default function Home() {
     Array.from(fileList).forEach((file) => formData.append("files", file));
 
     try {
-      // Enqueue: the backend returns instantly with a job id per file.
-      const res = await fetch(`${API_URL}/upload/async`, {
-        method: "POST",
-        headers: authHeaders(token),
-        body: formData,
-      });
+      // Prefer async when Redis/Celery is healthy; fall back to sync ingest.
+      const asyncController = new AbortController();
+      const asyncTimeout = setTimeout(() => asyncController.abort(), 8000);
+      let res: Response;
+      try {
+        res = await fetch(`${API_URL}/upload/async`, {
+          method: "POST",
+          headers: authHeaders(token),
+          body: formData,
+          signal: asyncController.signal,
+        });
+      } catch {
+        // Timeout / network — treat as async unavailable
+        res = new Response(null, { status: 503 });
+      } finally {
+        clearTimeout(asyncTimeout);
+      }
+
+      const asyncUnavailable =
+        res.status === 503 ||
+        res.status === 502 ||
+        res.status === 500;
+
+      if (asyncUnavailable) {
+        // Rebuild FormData — body can only be read once
+        const syncForm = new FormData();
+        Array.from(fileList).forEach((file) => syncForm.append("files", file));
+        res = await fetch(`${API_URL}/upload`, {
+          method: "POST",
+          headers: authHeaders(token),
+          body: syncForm,
+        });
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        if (!res.ok) throw new Error(await res.text());
+        await loadDocuments();
+        return;
+      }
+
       if (res.status === 401) {
         logout();
         return;
@@ -234,7 +283,30 @@ export default function Home() {
         2500,
       );
     } catch (err) {
-      setError("Upload failed: " + (err as Error).message);
+      // Network / Redis hang → try sync upload once
+      try {
+        const syncForm = new FormData();
+        Array.from(fileList).forEach((file) => syncForm.append("files", file));
+        const syncRes = await fetch(`${API_URL}/upload`, {
+          method: "POST",
+          headers: authHeaders(token),
+          body: syncForm,
+        });
+        if (syncRes.status === 401) {
+          logout();
+          return;
+        }
+        if (!syncRes.ok) throw new Error(await syncRes.text());
+        await loadDocuments();
+        return;
+      } catch (syncErr) {
+        const msg = (syncErr as Error).message || (err as Error).message;
+        setError(
+          msg === "Failed to fetch"
+            ? `Upload failed: cannot reach API at ${API_URL}. Is the backend running? (Async Redis may also be down — sync fallback failed too.)`
+            : `Upload failed: ${msg}`,
+        );
+      }
     } finally {
       setUploading(false);
     }
@@ -270,17 +342,38 @@ export default function Home() {
     setHistory((prev) => [...prev, { question: q, answer: "", sources: [], streaming: true }]);
 
     try {
-      const payload: { question: string; conversation_id?: string; history?: typeof priorHistory } = {
-        question: q,
+      const buildPayload = (convId: string | null) => {
+        const payload: {
+          question: string;
+          conversation_id?: string;
+          history?: typeof priorHistory;
+        } = { question: q };
+        if (convId) payload.conversation_id = convId;
+        else if (priorHistory.length) payload.history = priorHistory.slice(-6);
+        return payload;
       };
-      if (conversationId) payload.conversation_id = conversationId;
-      else payload.history = priorHistory.slice(-6);
 
-      const res = await fetch(`${API_URL}/query/stream`, {
+      let res = await fetch(`${API_URL}/query/stream`, {
         method: "POST",
         headers: authHeaders(token, true),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildPayload(conversationId)),
       });
+
+      // Stale conversation id → clear and retry once without it
+      if (res.status === 404) {
+        const errText = await res.text();
+        if (errText.toLowerCase().includes("conversation")) {
+          localStorage.removeItem(CONVERSATION_KEY);
+          setConversationId(null);
+          res = await fetch(`${API_URL}/query/stream`, {
+            method: "POST",
+            headers: authHeaders(token, true),
+            body: JSON.stringify(buildPayload(null)),
+          });
+        } else {
+          throw new Error(errText);
+        }
+      }
 
       if (res.status === 401) {
         logout();
@@ -314,7 +407,12 @@ export default function Home() {
             }
             setHistory((prev) => {
               const next = [...prev];
-              next[next.length - 1] = { ...next[next.length - 1], sources };
+              next[next.length - 1] = {
+                ...next[next.length - 1],
+                sources,
+                retrieval_query: event.retrieval_query || null,
+                query_rewritten: Boolean(event.query_rewritten),
+              };
               return next;
             });
           } else if (event.type === "token") {
@@ -430,9 +528,17 @@ export default function Home() {
         </div>
         <div className="text-right shrink-0">
           <p className="text-xs text-slate-500 mb-1">{user.email}</p>
-          <button onClick={logout} className="text-xs text-slate-700 underline hover:text-slate-900">
-            Log out
-          </button>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={startNewChat}
+              className="text-xs text-slate-700 underline hover:text-slate-900"
+            >
+              New chat
+            </button>
+            <button onClick={logout} className="text-xs text-slate-700 underline hover:text-slate-900">
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -555,6 +661,11 @@ export default function Home() {
           {history.map((turn, i) => (
             <div key={i} className="bg-white border border-slate-200 rounded-lg p-4">
               <p className="text-sm font-medium text-slate-800 mb-2">Q: {turn.question}</p>
+              {turn.query_rewritten && turn.retrieval_query && (
+                <p className="text-xs text-slate-500 mb-2 italic">
+                  Searched for: {turn.retrieval_query}
+                </p>
+              )}
               <p className="text-sm text-slate-700 whitespace-pre-wrap mb-3">
                 {turn.answer || (turn.streaming ? "…" : "")}
                 {turn.streaming && (

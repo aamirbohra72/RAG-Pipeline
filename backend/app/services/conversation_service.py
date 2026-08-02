@@ -94,7 +94,12 @@ def get_or_create_conversation(
     if conversation_id:
         if _conversation_owned(conversation_id, user_id):
             return conversation_id
-        raise ValueError(f"Conversation {conversation_id} not found for user")
+        # Stale id from localStorage / other user / DB reset — start a new thread
+        logger.info(
+            "Conversation %s not found for user %s; creating a new one",
+            conversation_id,
+            user_id,
+        )
     return create_conversation(user_id)
 
 
@@ -108,7 +113,12 @@ def load_history(
     limit = max_turns if max_turns is not None else settings.chat_history_turns
 
     if not _conversation_owned(conversation_id, user_id):
-        raise ValueError(f"Conversation {conversation_id} not found for user")
+        logger.warning(
+            "load_history: conversation %s missing for user %s — returning empty",
+            conversation_id,
+            user_id,
+        )
+        return []
 
     pool = get_pool()
     with pool.connection() as conn:
@@ -135,8 +145,8 @@ def save_turn(
     assistant_message: str,
     citations: Optional[List[dict]] = None,
 ) -> None:
-    if not _conversation_owned(conversation_id, user_id):
-        raise ValueError(f"Conversation {conversation_id} not found for user")
+    # Ensure the conversation row exists (handles race / stale client ids)
+    conversation_id = get_or_create_conversation(user_id, conversation_id)
 
     citations_json = json.dumps(citations) if citations else None
     pool = get_pool()

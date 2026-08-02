@@ -58,6 +58,7 @@ async def query(
             conversation_id=conv_id,
             retrieval_query=meta.get("retrieval_query"),
             query_rewritten=meta.get("query_rewritten", False),
+            resolved_entity=meta.get("resolved_entity"),
         )
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -103,6 +104,7 @@ async def query_stream(
             "conversation_id": conv_id,
             "retrieval_query": meta.get("retrieval_query"),
             "query_rewritten": meta.get("query_rewritten", False),
+            "resolved_entity": meta.get("resolved_entity"),
         }
         yield f"data: {json.dumps(payload)}\n\n"
         try:

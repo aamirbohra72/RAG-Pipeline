@@ -39,6 +39,7 @@ class QueryResponse(BaseModel):
     conversation_id: Optional[str] = None
     retrieval_query: Optional[str] = None
     query_rewritten: bool = False
+    resolved_entity: Optional[str] = None
 
 
 class SearchRequest(BaseModel):
